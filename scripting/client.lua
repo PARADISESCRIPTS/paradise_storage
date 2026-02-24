@@ -26,8 +26,13 @@ function CreateStashPoints()
     end
     stashBlips = {}
     
+    -- Remove old target zones
     for stashId, _ in pairs(stashPoints) do
-        exports.ox_target:removeZone(stashId)
+        if Config.Target == 'ox_target' then
+            exports.ox_target:removeZone(stashId)
+        elseif Config.Target == 'qb-target' then
+            exports['qb-target']:RemoveZone(stashId)
+        end
     end
     stashPoints = {}
     
@@ -68,22 +73,45 @@ function CreateStashPoints()
             end)
         end
         
-        exports.ox_target:addSphereZone({
-            name = stashId,
-            coords = vector3(stash.coords.x, stash.coords.y, stash.coords.z),
-            radius = 1.5,
-            debug = false,
-            options = {
-                {
-                    name = 'open_storage',
-                    icon = 'fas fa-box',
-                    label = 'Open ' .. stash.label,
-                    onSelect = function()
-                        OpenStash(stashId)
-                    end
+        -- Add target zone based on config
+        if Config.Target == 'ox_target' then
+            exports.ox_target:addSphereZone({
+                name = stashId,
+                coords = vector3(stash.coords.x, stash.coords.y, stash.coords.z),
+                radius = 1.5,
+                debug = false,
+                options = {
+                    {
+                        name = 'open_storage',
+                        icon = 'fas fa-box',
+                        label = 'Open ' .. stash.label,
+                        onSelect = function()
+                            OpenStash(stashId)
+                        end
+                    }
                 }
-            }
-        })
+            })
+        elseif Config.Target == 'qb-target' then
+            exports['qb-target']:AddBoxZone(stashId, vector3(stash.coords.x, stash.coords.y, stash.coords.z), 1.5, 1.5, {
+                name = stashId,
+                heading = 0,
+                debugPoly = false,
+                minZ = stash.coords.z - 1.0,
+                maxZ = stash.coords.z + 1.0,
+            }, {
+                options = {
+                    {
+                        type = "client",
+                        icon = "fas fa-box",
+                        label = "Open " .. stash.label,
+                        action = function()
+                            OpenStash(stashId)
+                        end,
+                    }
+                },
+                distance = 2.0
+            })
+        end
         
         stashPoints[stashId] = true
         

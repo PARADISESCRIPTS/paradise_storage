@@ -63,3 +63,6 @@ Config.Commands = {
         description = 'Manage existing stashes'
     }
 }
+
+-- Target System ('ox_target' or 'qb-target')
+Config.Target = 'ox_target'
