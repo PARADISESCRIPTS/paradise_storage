@@ -124,7 +124,7 @@ function IsAdmin(source)
     return false
 end
 
-QBCore.Commands.Add('createstash', 'Create a new stash', {}, false, function(source)
+QBCore.Commands.Add(Config.Commands.createStash.name, Config.Commands.createStash.description, {}, false, function(source)
     if not IsAdmin(source) then
         TriggerClientEvent('QBCore:Notify', source, 'You do not have permission', 'error')
         return
@@ -133,7 +133,7 @@ QBCore.Commands.Add('createstash', 'Create a new stash', {}, false, function(sou
     TriggerClientEvent('paradise_storages:client:openCreateMenu', source)
 end)
 
-QBCore.Commands.Add('managestash', 'Manage existing stashes', {}, false, function(source)
+QBCore.Commands.Add(Config.Commands.manageStash.name, Config.Commands.manageStash.description, {}, false, function(source)
     if not IsAdmin(source) then
         TriggerClientEvent('QBCore:Notify', source, 'You do not have permission', 'error')
         return

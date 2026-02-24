@@ -51,3 +51,15 @@ Config.StashTypes = {
     GANG = 'gang',
     PASSCODE = 'passcode'
 }
+
+-- Admin Commands
+Config.Commands = {
+    createStash = {
+        name = 'createstash',
+        description = 'Create a new stash'
+    },
+    manageStash = {
+        name = 'managestash',
+        description = 'Manage existing stashes'
+    }
+}
