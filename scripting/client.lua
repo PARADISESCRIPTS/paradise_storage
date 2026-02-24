@@ -296,31 +296,10 @@ function OpenStashManagementOptions(stashId)
             },
             {
                 title = 'Update Location',
-                description = 'Set stash to your current location',
+                description = 'Use laser to set new location',
                 icon = 'map-pin',
                 onSelect = function()
-                    local ped = PlayerPedId()
-                    local coords = GetEntityCoords(ped)
-                    
-                    local data = {
-                        label = stash.label,
-                        slots = stash.slots,
-                        weight = stash.weight,
-                        stash_type = stash.stash_type,
-                        coords = {x = coords.x, y = coords.y, z = coords.z},
-                        job = stash.job,
-                        gang = stash.gang,
-                        cid = stash.cid,
-                        passcode = stash.passcode,
-                        show_blip = stash.show_blip,
-                        blip_sprite = stash.blip_sprite,
-                        blip_color = stash.blip_color,
-                        blip_scale = stash.blip_scale,
-                        spawn_prop = stash.spawn_prop,
-                        prop_model = stash.prop_model
-                    }
-                    
-                    TriggerServerEvent('paradise_storages:server:updateStash', stashId, data)
+                    UpdateStashLocation(stashId)
                 end
             },
             {
@@ -405,10 +384,69 @@ function EditStash(stashId)
         job = additionalData.job,
         gang = additionalData.gang,
         cid = additionalData.cid,
-        passcode = additionalData.passcode
+        passcode = additionalData.passcode,
+        show_blip = stash.show_blip,
+        blip_sprite = stash.blip_sprite,
+        blip_color = stash.blip_color,
+        blip_scale = stash.blip_scale,
+        spawn_prop = stash.spawn_prop,
+        prop_model = stash.prop_model
     }
     
     TriggerServerEvent('paradise_storages:server:updateStash', stashId, data)
+end
+
+function UpdateStashLocation(stashId)
+    local stash = stashes[stashId]
+    if not stash then return end
+    
+    QBCore.Functions.Notify('Use the laser to set new location. Press E to confirm, X to cancel', 'primary', 5000)
+    
+    local updateLaser = true
+    CreateThread(function()
+        while updateLaser do
+            local hit, coords = DrawLaser('PRESS ~g~E~w~ TO UPDATE LOCATION\nPRESS ~r~X~w~ TO CANCEL', {r = 2, g = 241, b = 181, a = 200})
+            
+            if IsControlJustReleased(0, 38) then -- E key
+                updateLaser = false
+                if hit then
+                    if stashProps[stashId] and DoesEntityExist(stashProps[stashId]) then
+                        SetEntityAsMissionEntity(stashProps[stashId], false, true)
+                        DeleteEntity(stashProps[stashId])
+                        stashProps[stashId] = nil
+                    end
+                    
+                    local data = {
+                        label = stash.label,
+                        slots = stash.slots,
+                        weight = stash.weight,
+                        stash_type = stash.stash_type,
+                        coords = {x = coords.x, y = coords.y, z = coords.z},
+                        job = stash.job,
+                        gang = stash.gang,
+                        cid = stash.cid,
+                        passcode = stash.passcode,
+                        show_blip = stash.show_blip,
+                        blip_sprite = stash.blip_sprite,
+                        blip_color = stash.blip_color,
+                        blip_scale = stash.blip_scale,
+                        spawn_prop = stash.spawn_prop,
+                        prop_model = stash.prop_model
+                    }
+                    
+                    TriggerServerEvent('paradise_storages:server:updateStash', stashId, data)
+                    QBCore.Functions.Notify('Location updated successfully!', 'success')
+                else
+                    QBCore.Functions.Notify('Invalid placement location', 'error')
+                end
+            elseif IsControlJustReleased(0, 73) then -- X key
+                updateLaser = false
+                QBCore.Functions.Notify('Location update cancelled', 'error')
+            end
+            
+            Wait(0)
+        end
+    end)
 end
 
 

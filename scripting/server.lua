@@ -2,6 +2,10 @@ local QBCore = exports['qb-core']:GetCoreObject()
 local stashes = {}
 
 CreateThread(function()
+    while not MySQL do
+        Wait(100)
+    end
+    
     MySQL.query([[
         CREATE TABLE IF NOT EXISTS paradise_storages (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -196,8 +200,19 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
         return
     end
     
+    local spawnProp = data.spawn_prop
+    local propModel = data.prop_model
+    
+    if spawnProp == nil then
+        spawnProp = stashes[stashId].spawn_prop
+    end
+    
+    if not propModel then
+        propModel = stashes[stashId].prop_model
+    end
+    
     MySQL.update('UPDATE paradise_storages SET label = ?, slots = ?, weight = ?, coords = ?, stash_type = ?, job = ?, gang = ?, cid = ?, passcode = ?, show_blip = ?, blip_sprite = ?, blip_color = ?, blip_scale = ?, spawn_prop = ?, prop_model = ? WHERE stash_id = ?',
-        {data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, stashId},
+        {data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, spawnProp, propModel, stashId},
         function(affectedRows)
             if affectedRows > 0 then
                 stashes[stashId].label = data.label
@@ -213,8 +228,8 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
                 stashes[stashId].blip_sprite = data.blip_sprite or 478
                 stashes[stashId].blip_color = data.blip_color or 2
                 stashes[stashId].blip_scale = data.blip_scale or 0.8
-                stashes[stashId].spawn_prop = data.spawn_prop or false
-                stashes[stashId].prop_model = data.prop_model
+                stashes[stashId].spawn_prop = spawnProp
+                stashes[stashId].prop_model = propModel
                 
                 TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
                 TriggerClientEvent('QBCore:Notify', src, 'Stash updated successfully!', 'success')
