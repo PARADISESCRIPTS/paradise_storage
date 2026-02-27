@@ -42,10 +42,6 @@
 </tr>
 </table>
 
-### Configuration Options
-
-- **Target System**: Choose between `ox_target` or `qb-target` in `config.lua`
-- **Framework**: Currently optimized for QBCore (ESX support coming soon)
 
 ---
 
