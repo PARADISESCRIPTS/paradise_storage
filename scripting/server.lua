@@ -7,6 +7,37 @@ elseif Config.Framework == 'esx' then
     ESX = exports['es_extended']:getSharedObject()
 end
 
+function SendDiscordLog(title, description, color)
+    if not Paradise.Discord.enabled or Paradise.Discord.webhook == '' then return end
+    
+    local embed = {
+        {
+            ['title'] = title,
+            ['description'] = description,
+            ['color'] = color or Paradise.Discord.color,
+            ['footer'] = {
+                ['text'] = Paradise.Discord.footer .. ' | ' .. os.date('%Y-%m-%d %H:%M:%S')
+            }
+        }
+    }
+    
+    PerformHttpRequest(Paradise.Discord.webhook, function(err, text, headers) end, 'POST', json.encode({
+        username = Paradise.Discord.botName,
+        embeds = embed
+    }), {['Content-Type'] = 'application/json'})
+end
+
+function GetPlayerName(source)
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        return Player and Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname or 'Unknown'
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        return xPlayer and xPlayer.getName() or 'Unknown'
+    end
+    return GetPlayerName(source) or 'Unknown'
+end
+
 CreateThread(function()
     while not MySQL do
         Wait(100)
@@ -246,6 +277,15 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
                 
                 TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
                 TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Stash created successfully!'})
+                
+                if Paradise.Discord.logs.createStash then
+                    local playerName = GetPlayerName(src)
+                    local logDescription = string.format(
+                        '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s\n**Slots:** %s\n**Weight:** %s\n**Coords:** %s',
+                        playerName, src, stashId, data.label, data.stash_type, data.slots, data.weight, json.encode(data.coords)
+                    )
+                    SendDiscordLog('Stash Created', logDescription, 3066993) -- Green
+                end
             else
                 TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to create stash'})
             end
@@ -295,6 +335,15 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
                 
                 TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
                 TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Stash updated successfully!'})
+                
+                if Paradise.Discord.logs.updateStash then
+                    local playerName = GetPlayerName(src)
+                    local logDescription = string.format(
+                        '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s\n**Slots:** %s\n**Weight:** %s\n**Coords:** %s',
+                        playerName, src, stashId, data.label, data.stash_type, data.slots, data.weight, json.encode(data.coords)
+                    )
+                    SendDiscordLog('Stash Updated', logDescription, 15105570) -- Orange
+                end
             else
                 TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to update stash'})
             end
@@ -313,9 +362,19 @@ RegisterNetEvent('paradise_storages:server:deleteStash', function(stashId)
     
     MySQL.query('DELETE FROM paradise_storages WHERE stash_id = ?', {stashId}, function(result)
         if result.affectedRows > 0 then
+            local deletedStash = stashes[stashId]
             stashes[stashId] = nil
             TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
             TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Stash deleted successfully!'})
+            
+            if Paradise.Discord.logs.deleteStash then
+                local playerName = GetPlayerName(src)
+                local logDescription = string.format(
+                    '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s',
+                    playerName, src, stashId, deletedStash.label, deletedStash.stash_type
+                )
+                SendDiscordLog('Stash Deleted', logDescription, 15158332) -- Red
+            end
         else
             TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to delete stash'})
         end
@@ -413,4 +472,13 @@ RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcod
     
     exports.ox_inventory:RegisterStash(stashId, stash.label, stash.slots, stash.weight, false)
     TriggerClientEvent('ox_inventory:openInventory', src, 'stash', stashId)
+    
+    if Paradise.Discord.logs.accessStash then
+        local playerName = GetPlayerName(src)
+        local logDescription = string.format(
+            '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s',
+            playerName, src, stashId, stash.label, stash.stash_type
+        )
+        SendDiscordLog('Stash Accessed', logDescription, 3447003) -- Blue
+    end
 end)
