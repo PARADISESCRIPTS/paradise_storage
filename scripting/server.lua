@@ -1,5 +1,11 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore, ESX = nil, nil
 local stashes = {}
+
+if Config.Framework == 'qb-core' then
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif Config.Framework == 'esx' then
+    ESX = exports['es_extended']:getSharedObject()
+end
 
 CreateThread(function()
     while not MySQL do
@@ -65,8 +71,13 @@ end
 
 function GetPlayerIdentifierByType(source, identifierType)
     if identifierType == 'citizenid' then
-        local Player = QBCore.Functions.GetPlayer(source)
-        return Player and Player.PlayerData.citizenid
+        if Config.Framework == 'qb-core' then
+            local Player = QBCore.Functions.GetPlayer(source)
+            return Player and Player.PlayerData.citizenid
+        elseif Config.Framework == 'esx' then
+            local xPlayer = ESX.GetPlayerFromId(source)
+            return xPlayer and xPlayer.identifier
+        end
     end
     
     local identifiers = GetPlayerIdentifiers(source)
@@ -79,18 +90,47 @@ function GetPlayerIdentifierByType(source, identifierType)
 end
 
 function IsAdmin(source)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return false end
-    
-    for _, group in ipairs(Config.AdminPermissions.groups) do
-        if QBCore.Functions.HasPermission(source, group) then
-            return true
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        if not Player then return false end
+        
+        for _, group in ipairs(Config.AdminPermissions.groups) do
+            if QBCore.Functions.HasPermission(source, group) then
+                return true
+            end
         end
-    end
-    
-    for _, cid in ipairs(Config.AdminPermissions.citizenids) do
-        if Player.PlayerData.citizenid == cid then
-            return true
+        
+        for _, cid in ipairs(Config.AdminPermissions.citizenids) do
+            if Player.PlayerData.citizenid == cid then
+                return true
+            end
+        end
+        
+        for _, job in ipairs(Config.AdminPermissions.jobs) do
+            if Player.PlayerData.job.name == job then
+                return true
+            end
+        end
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if not xPlayer then return false end
+        
+        for _, group in ipairs(Config.AdminPermissions.groups) do
+            if xPlayer.getGroup() == group then
+                return true
+            end
+        end
+        
+        for _, cid in ipairs(Config.AdminPermissions.citizenids) do
+            if xPlayer.identifier == cid then
+                return true
+            end
+        end
+        
+        for _, job in ipairs(Config.AdminPermissions.jobs) do
+            if xPlayer.job.name == job then
+                return true
+            end
         end
     end
     
@@ -115,32 +155,46 @@ function IsAdmin(source)
         end
     end
     
-    for _, job in ipairs(Config.AdminPermissions.jobs) do
-        if Player.PlayerData.job.name == job then
-            return true
-        end
-    end
-    
     return false
 end
 
-QBCore.Commands.Add(Config.Commands.createStash.name, Config.Commands.createStash.description, {}, false, function(source)
-    if not IsAdmin(source) then
-        TriggerClientEvent('QBCore:Notify', source, 'You do not have permission', 'error')
-        return
-    end
-    
-    TriggerClientEvent('paradise_storages:client:openCreateMenu', source)
-end)
+if Config.Framework == 'qb-core' then
+    QBCore.Commands.Add(Config.Commands.createStash.name, Config.Commands.createStash.description, {}, false, function(source)
+        if not IsAdmin(source) then
+            TriggerClientEvent('ox_lib:notify', source, {type = 'error', description = 'You do not have permission'})
+            return
+        end
+        
+        TriggerClientEvent('paradise_storages:client:openCreateMenu', source)
+    end)
 
-QBCore.Commands.Add(Config.Commands.manageStash.name, Config.Commands.manageStash.description, {}, false, function(source)
-    if not IsAdmin(source) then
-        TriggerClientEvent('QBCore:Notify', source, 'You do not have permission', 'error')
-        return
-    end
-    
-    TriggerClientEvent('paradise_storages:client:openManageMenu', source)
-end)
+    QBCore.Commands.Add(Config.Commands.manageStash.name, Config.Commands.manageStash.description, {}, false, function(source)
+        if not IsAdmin(source) then
+            TriggerClientEvent('ox_lib:notify', source, {type = 'error', description = 'You do not have permission'})
+            return
+        end
+        
+        TriggerClientEvent('paradise_storages:client:openManageMenu', source)
+    end)
+elseif Config.Framework == 'esx' then
+    RegisterCommand(Config.Commands.createStash.name, function(source)
+        if not IsAdmin(source) then
+            TriggerClientEvent('ox_lib:notify', source, {type = 'error', description = 'You do not have permission'})
+            return
+        end
+        
+        TriggerClientEvent('paradise_storages:client:openCreateMenu', source)
+    end)
+
+    RegisterCommand(Config.Commands.manageStash.name, function(source)
+        if not IsAdmin(source) then
+            TriggerClientEvent('ox_lib:notify', source, {type = 'error', description = 'You do not have permission'})
+            return
+        end
+        
+        TriggerClientEvent('paradise_storages:client:openManageMenu', source)
+    end)
+end
 
 lib.callback.register('paradise_storages:server:getStashes', function(source)
     return stashes
@@ -150,7 +204,15 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
     local src = source
     if not IsAdmin(src) then return end
     
-    local Player = QBCore.Functions.GetPlayer(src)
+    local creatorId = nil
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(src)
+        creatorId = Player and Player.PlayerData.citizenid
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(src)
+        creatorId = xPlayer and xPlayer.identifier
+    end
+    
     local stashId = 'stash_' .. math.random(10000, 99999)
     
     while stashes[stashId] do
@@ -158,7 +220,7 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
     end
     
     MySQL.insert('INSERT INTO paradise_storages (stash_id, label, slots, weight, coords, stash_type, job, gang, cid, passcode, show_blip, blip_sprite, blip_color, blip_scale, spawn_prop, prop_model, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        {stashId, data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, Player.PlayerData.citizenid},
+        {stashId, data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, creatorId},
         function(id)
             if id then
                 stashes[stashId] = {
@@ -179,13 +241,13 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
                     blip_scale = data.blip_scale or 0.8,
                     spawn_prop = data.spawn_prop or false,
                     prop_model = data.prop_model,
-                    created_by = Player.PlayerData.citizenid
+                    created_by = creatorId
                 }
                 
                 TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
-                TriggerClientEvent('QBCore:Notify', src, 'Stash created successfully!', 'success')
+                TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Stash created successfully!'})
             else
-                TriggerClientEvent('QBCore:Notify', src, 'Failed to create stash', 'error')
+                TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to create stash'})
             end
         end
     )
@@ -196,7 +258,7 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
     if not IsAdmin(src) then return end
     
     if not stashes[stashId] then
-        TriggerClientEvent('QBCore:Notify', src, 'Stash not found', 'error')
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Stash not found'})
         return
     end
     
@@ -232,9 +294,9 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
                 stashes[stashId].prop_model = propModel
                 
                 TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
-                TriggerClientEvent('QBCore:Notify', src, 'Stash updated successfully!', 'success')
+                TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Stash updated successfully!'})
             else
-                TriggerClientEvent('QBCore:Notify', src, 'Failed to update stash', 'error')
+                TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to update stash'})
             end
         end
     )
@@ -245,7 +307,7 @@ RegisterNetEvent('paradise_storages:server:deleteStash', function(stashId)
     if not IsAdmin(src) then return end
     
     if not stashes[stashId] then
-        TriggerClientEvent('QBCore:Notify', src, 'Stash not found', 'error')
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Stash not found'})
         return
     end
     
@@ -253,30 +315,46 @@ RegisterNetEvent('paradise_storages:server:deleteStash', function(stashId)
         if result.affectedRows > 0 then
             stashes[stashId] = nil
             TriggerClientEvent('paradise_storages:client:refreshStashes', -1)
-            TriggerClientEvent('QBCore:Notify', src, 'Stash deleted successfully!', 'success')
+            TriggerClientEvent('ox_lib:notify', src, {type = 'success', description = 'Stash deleted successfully!'})
         else
-            TriggerClientEvent('QBCore:Notify', src, 'Failed to delete stash', 'error')
+            TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Failed to delete stash'})
         end
     end)
 end)
 
 lib.callback.register('paradise_storages:server:checkAccess', function(source, stashId)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return false end
-    
     local stash = stashes[stashId]
     if not stash then return false end
     
     if IsAdmin(source) then return true end
     
-    if stash.stash_type == Config.StashTypes.JOB then
-        return Player.PlayerData.job.name == stash.job
-    elseif stash.stash_type == Config.StashTypes.GANG then
-        return Player.PlayerData.gang.name == stash.gang
-    elseif stash.stash_type == Config.StashTypes.PERSONAL then
-        return Player.PlayerData.citizenid == stash.cid
-    elseif stash.stash_type == Config.StashTypes.PASSCODE then
-        return true
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        if not Player then return false end
+        
+        if stash.stash_type == Config.StashTypes.JOB then
+            return Player.PlayerData.job.name == stash.job
+        elseif stash.stash_type == Config.StashTypes.GANG then
+            return Player.PlayerData.gang.name == stash.gang
+        elseif stash.stash_type == Config.StashTypes.PERSONAL then
+            return Player.PlayerData.citizenid == stash.cid
+        elseif stash.stash_type == Config.StashTypes.PASSCODE then
+            return true
+        end
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if not xPlayer then return false end
+        
+        if stash.stash_type == Config.StashTypes.JOB then
+            return xPlayer.job.name == stash.job
+        elseif stash.stash_type == Config.StashTypes.GANG then
+            -- ESX doesn't have gangs by default, add yours over here
+            return false
+        elseif stash.stash_type == Config.StashTypes.PERSONAL then
+            return xPlayer.identifier == stash.cid
+        elseif stash.stash_type == Config.StashTypes.PASSCODE then
+            return true
+        end
     end
     
     return false
@@ -291,30 +369,45 @@ end)
 
 RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcodeVerified)
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-    
     local stash = stashes[stashId]
     
     if not stash then
-        TriggerClientEvent('QBCore:Notify', src, 'Stash not found', 'error')
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'Stash not found'})
         return
     end
     
     local hasAccess = false
     
-    if stash.stash_type == Config.StashTypes.JOB then
-        hasAccess = Player.PlayerData.job.name == stash.job
-    elseif stash.stash_type == Config.StashTypes.GANG then
-        hasAccess = Player.PlayerData.gang.name == stash.gang
-    elseif stash.stash_type == Config.StashTypes.PERSONAL then
-        hasAccess = Player.PlayerData.citizenid == stash.cid
-    elseif stash.stash_type == Config.StashTypes.PASSCODE then
-        hasAccess = passcodeVerified == true
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(src)
+        if not Player then return end
+        
+        if stash.stash_type == Config.StashTypes.JOB then
+            hasAccess = Player.PlayerData.job.name == stash.job
+        elseif stash.stash_type == Config.StashTypes.GANG then
+            hasAccess = Player.PlayerData.gang.name == stash.gang
+        elseif stash.stash_type == Config.StashTypes.PERSONAL then
+            hasAccess = Player.PlayerData.citizenid == stash.cid
+        elseif stash.stash_type == Config.StashTypes.PASSCODE then
+            hasAccess = passcodeVerified == true
+        end
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(src)
+        if not xPlayer then return end
+        
+        if stash.stash_type == Config.StashTypes.JOB then
+            hasAccess = xPlayer.job.name == stash.job
+        elseif stash.stash_type == Config.StashTypes.GANG then
+            hasAccess = false -- ESX doesn't have gangs by default
+        elseif stash.stash_type == Config.StashTypes.PERSONAL then
+            hasAccess = xPlayer.identifier == stash.cid
+        elseif stash.stash_type == Config.StashTypes.PASSCODE then
+            hasAccess = passcodeVerified == true
+        end
     end
     
     if not hasAccess then
-        TriggerClientEvent('QBCore:Notify', src, 'You do not have access to this storage', 'error')
+        TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You do not have access to this storage'})
         return
     end
     

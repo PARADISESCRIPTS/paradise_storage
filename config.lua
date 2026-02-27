@@ -1,5 +1,11 @@
 Config = {}
 
+-- Framework Selection ('qb-core' or 'esx')
+Config.Framework = 'qb-core'
+
+-- Target System ('ox_target' or 'qb-target')
+Config.Target = 'ox_target'
+
 Config.AdminPermissions = {
     -- Permission groups (QBCore permissions)
     groups = {
@@ -63,6 +69,3 @@ Config.Commands = {
         description = 'Manage existing stashes'
     }
 }
-
--- Target System ('ox_target' or 'qb-target')
-Config.Target = 'ox_target'

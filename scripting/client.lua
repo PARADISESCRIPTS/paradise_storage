@@ -1,10 +1,16 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore, ESX = nil, nil
 local stashes = {}
 local stashBlips = {}
 local stashPoints = {}
 local stashProps = {}
 local creationLaser = false
 local stashCreationData = nil
+
+if Config.Framework == 'qb-core' then
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif Config.Framework == 'esx' then
+    ESX = exports['es_extended']:getSharedObject()
+end
 
 function LoadStashes()
     stashes = lib.callback.await('paradise_storages:server:getStashes', false)
@@ -26,7 +32,6 @@ function CreateStashPoints()
     end
     stashBlips = {}
     
-    -- Remove old target zones
     for stashId, _ in pairs(stashPoints) do
         if Config.Target == 'ox_target' then
             exports.ox_target:removeZone(stashId)
@@ -73,7 +78,6 @@ function CreateStashPoints()
             end)
         end
         
-        -- Add target zone based on config
         if Config.Target == 'ox_target' then
             exports.ox_target:addSphereZone({
                 name = stashId,
@@ -134,7 +138,7 @@ function OpenStash(stashId)
     local hasAccess = lib.callback.await('paradise_storages:server:checkAccess', false, stashId)
     
     if not hasAccess then
-        QBCore.Functions.Notify('You do not have access to this storage', 'error')
+        lib.notify({type = 'error', description = 'You do not have access to this storage'})
         return
     end
     
@@ -151,7 +155,7 @@ function OpenStash(stashId)
         local verified = lib.callback.await('paradise_storages:server:verifyPasscode', false, stashId, input[1])
         
         if not verified then
-            QBCore.Functions.Notify('Incorrect passcode', 'error')
+            lib.notify({type = 'error', description = 'Incorrect passcode'})
             return
         end
         
@@ -254,7 +258,7 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
         prop_model = propData.prop_model
     }
     
-    QBCore.Functions.Notify('Use the laser to place the storage. Press E to confirm, X to cancel', 'primary', 5000)
+    lib.notify({type = 'info', description = 'Use the laser to place the storage. Press E to confirm, X to cancel', duration = 5000})
     ToggleCreationLaser()
 end)
 
@@ -284,7 +288,7 @@ RegisterNetEvent('paradise_storages:client:openManageMenu', function()
     end
     
     if #options == 0 then
-        QBCore.Functions.Notify('No stashes found', 'error')
+        lib.notify({type = 'error', description = 'No stashes found'})
         return
     end
     
@@ -319,7 +323,7 @@ function OpenStashManagementOptions(stashId)
                 icon = 'location-dot',
                 onSelect = function()
                     SetEntityCoords(PlayerPedId(), stash.coords.x, stash.coords.y, stash.coords.z)
-                    QBCore.Functions.Notify('Teleported to stash', 'success')
+                    lib.notify({type = 'success', description = 'Teleported to stash'})
                 end
             },
             {
@@ -428,7 +432,7 @@ function UpdateStashLocation(stashId)
     local stash = stashes[stashId]
     if not stash then return end
     
-    QBCore.Functions.Notify('Use the laser to set new location. Press E to confirm, X to cancel', 'primary', 5000)
+    lib.notify({type = 'info', description = 'Use the laser to set new location. Press E to confirm, X to cancel', duration = 5000})
     
     local updateLaser = true
     CreateThread(function()
@@ -463,13 +467,13 @@ function UpdateStashLocation(stashId)
                     }
                     
                     TriggerServerEvent('paradise_storages:server:updateStash', stashId, data)
-                    QBCore.Functions.Notify('Location updated successfully!', 'success')
+                    lib.notify({type = 'success', description = 'Location updated successfully!'})
                 else
-                    QBCore.Functions.Notify('Invalid placement location', 'error')
+                    lib.notify({type = 'error', description = 'Invalid placement location'})
                 end
             elseif IsControlJustReleased(0, 73) then -- X key
                 updateLaser = false
-                QBCore.Functions.Notify('Location update cancelled', 'error')
+                lib.notify({type = 'error', description = 'Location update cancelled'})
             end
             
             Wait(0)
@@ -491,14 +495,14 @@ function ToggleCreationLaser()
                         stashCreationData.coords = {x = coords.x, y = coords.y, z = coords.z}
                         TriggerServerEvent('paradise_storages:server:createStash', stashCreationData)
                         stashCreationData = nil
-                        QBCore.Functions.Notify('Storage placed successfully!', 'success')
+                        lib.notify({type = 'success', description = 'Storage placed successfully!'})
                     else
-                        QBCore.Functions.Notify('Invalid placement location', 'error')
+                        lib.notify({type = 'error', description = 'Invalid placement location'})
                     end
                 elseif IsControlJustReleased(0, 73) then -- X key
                     creationLaser = false
                     stashCreationData = nil
-                    QBCore.Functions.Notify('Storage placement cancelled', 'error')
+                    lib.notify({type = 'error', description = 'Storage placement cancelled'})
                 end
                 
                 Wait(0)
