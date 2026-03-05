@@ -55,7 +55,22 @@ Config.StashTypes = {
     PERSONAL = 'personal',
     JOB = 'job',
     GANG = 'gang',
-    PASSCODE = 'passcode'
+    PASSCODE = 'passcode',
+    ITEM = 'item' -- Requires specific item to open
+}
+
+-- Raid System
+Config.RaidSystem = {
+    enabled = true,
+    allowedJobs = {'police', 'sheriff', 'fbi'}, -- Jobs that can raid stashes
+    raidItem = 'advancedlockpick', -- Item required to raid
+    raidableTypes = {
+        Config.StashTypes.PERSONAL,
+        Config.StashTypes.GANG,
+        Config.StashTypes.PASSCODE,
+        Config.StashTypes.ITEM
+    },
+    removeItemOnUse = true -- Remove raid item after use
 }
 
 -- Admin Commands

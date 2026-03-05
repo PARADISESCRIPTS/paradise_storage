@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `paradise_storages` (
     `gang` VARCHAR(50) DEFAULT NULL,
     `cid` VARCHAR(50) DEFAULT NULL,
     `passcode` VARCHAR(50) DEFAULT NULL,
+    `required_item` VARCHAR(100) DEFAULT NULL,
     `show_blip` BOOLEAN DEFAULT FALSE,
     `blip_sprite` INT DEFAULT 478,
     `blip_color` INT DEFAULT 2,
@@ -19,3 +20,7 @@ CREATE TABLE IF NOT EXISTS `paradise_storages` (
     `created_by` VARCHAR(50) NOT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Migration query for existing installations
+-- Run this if you already have the paradise_storages table
+ALTER TABLE `paradise_storages` ADD COLUMN `required_item` VARCHAR(100) DEFAULT NULL AFTER `passcode`;

@@ -79,23 +79,67 @@ function CreateStashPoints()
         end
         
         if Config.Target == 'ox_target' then
+            local targetOptions = {
+                {
+                    name = 'open_storage',
+                    icon = 'fas fa-box',
+                    label = 'Open ' .. stash.label,
+                    onSelect = function()
+                        OpenStash(stashId)
+                    end
+                }
+            }
+            
+            if Config.RaidSystem.enabled then
+                table.insert(targetOptions, {
+                    name = 'raid_storage',
+                    icon = 'fas fa-gavel',
+                    label = 'Raid ' .. stash.label,
+                    canInteract = function()
+                        local canRaid = lib.callback.await('paradise_storages:server:canRaid', false, stashId)
+                        return canRaid
+                    end,
+                    onSelect = function()
+                        RaidStash(stashId)
+                    end
+                })
+            end
+            
             exports.ox_target:addSphereZone({
                 name = stashId,
                 coords = vector3(stash.coords.x, stash.coords.y, stash.coords.z),
                 radius = 1.5,
                 debug = false,
-                options = {
-                    {
-                        name = 'open_storage',
-                        icon = 'fas fa-box',
-                        label = 'Open ' .. stash.label,
-                        onSelect = function()
-                            OpenStash(stashId)
-                        end
-                    }
-                }
+                options = targetOptions
             })
         elseif Config.Target == 'qb-target' then
+            local targetOptions = {
+                {
+                    type = "client",
+                    icon = "fas fa-box",
+                    label = "Open " .. stash.label,
+                    action = function()
+                        OpenStash(stashId)
+                    end,
+                }
+            }
+            
+            if Config.RaidSystem.enabled then
+                table.insert(targetOptions, {
+                    type = "client",
+                    icon = "fas fa-gavel",
+                    label = "Raid " .. stash.label,
+                    action = function()
+                        local canRaid = lib.callback.await('paradise_storages:server:canRaid', false, stashId)
+                        if canRaid then
+                            RaidStash(stashId)
+                        else
+                            lib.notify({type = 'error', description = 'You need a ' .. Config.RaidSystem.raidItem .. ' to raid this stash'})
+                        end
+                    end,
+                })
+            end
+            
             exports['qb-target']:AddBoxZone(stashId, vector3(stash.coords.x, stash.coords.y, stash.coords.z), 1.5, 1.5, {
                 name = stashId,
                 heading = 0,
@@ -103,16 +147,7 @@ function CreateStashPoints()
                 minZ = stash.coords.z - 1.0,
                 maxZ = stash.coords.z + 1.0,
             }, {
-                options = {
-                    {
-                        type = "client",
-                        icon = "fas fa-box",
-                        label = "Open " .. stash.label,
-                        action = function()
-                            OpenStash(stashId)
-                        end,
-                    }
-                },
+                options = targetOptions,
                 distance = 2.0
             })
         end
@@ -136,13 +171,13 @@ end
 
 function OpenStash(stashId)
     local hasAccess = lib.callback.await('paradise_storages:server:checkAccess', false, stashId)
+    local stash = stashes[stashId]
     
     if not hasAccess then
         lib.notify({type = 'error', description = 'You do not have access to this storage'})
         return
     end
     
-    local stash = stashes[stashId]
     local passcodeVerified = false
     
     if stash.stash_type == Config.StashTypes.PASSCODE then
@@ -162,7 +197,40 @@ function OpenStash(stashId)
         passcodeVerified = true
     end
     
-    TriggerServerEvent('paradise_storages:server:openStash', stashId, passcodeVerified)
+    TriggerServerEvent('paradise_storages:server:openStash', stashId, passcodeVerified, false)
+end
+
+function RaidStash(stashId)
+    local stash = stashes[stashId]
+    
+    local alert = lib.alertDialog({
+        header = 'Raid Stash',
+        content = 'You are about to raid "' .. stash.label .. '" using a ' .. Config.RaidSystem.raidItem .. '. This action will be logged. Continue?',
+        centered = true,
+        cancel = true
+    })
+    
+    if alert == 'confirm' then
+        if lib.progressBar({
+            duration = 5000,
+            label = 'Raiding stash...',
+            useWhileDead = false,
+            canCancel = true,
+            disable = {
+                car = true,
+                move = true,
+                combat = true
+            },
+            anim = {
+                dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+                clip = 'machinic_loop_mechandplayer'
+            },
+        }) then
+            TriggerServerEvent('paradise_storages:server:openStash', stashId, false, true)
+        else
+            lib.notify({type = 'error', description = 'Raid cancelled'})
+        end
+    end
 end
 
 
@@ -175,7 +243,8 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
             {value = Config.StashTypes.PERSONAL, label = 'Personal (CID Based)'},
             {value = Config.StashTypes.JOB, label = 'Job Based'},
             {value = Config.StashTypes.GANG, label = 'Gang Based'},
-            {value = Config.StashTypes.PASSCODE, label = 'Passcode Protected'}
+            {value = Config.StashTypes.PASSCODE, label = 'Passcode Protected'},
+            {value = Config.StashTypes.ITEM, label = 'Item Required'}
         }},
         {type = 'checkbox', label = 'Show Blip on Map', description = 'Display a blip for this storage', checked = false},
         {type = 'checkbox', label = 'Spawn Prop', description = 'Spawn a prop at storage location', checked = false}
@@ -217,6 +286,13 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
         })
         if not passcodeInput then return end
         additionalData.passcode = passcodeInput[1]
+        
+    elseif stashType == Config.StashTypes.ITEM then
+        local itemInput = lib.inputDialog('Item Configuration', {
+            {type = 'input', label = 'Required Item', description = 'Item name needed to open (e.g., lockpick)', required = true}
+        })
+        if not itemInput then return end
+        additionalData.required_item = itemInput[1]
     end
     
     if showBlip then
@@ -250,6 +326,7 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
         gang = additionalData.gang,
         cid = additionalData.cid,
         passcode = additionalData.passcode,
+        required_item = additionalData.required_item,
         show_blip = showBlip,
         blip_sprite = blipData.blip_sprite or 478,
         blip_color = blipData.blip_color or 2,
@@ -263,38 +340,65 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
 end)
 
 RegisterNetEvent('paradise_storages:client:openManageMenu', function()
+    local searchInput = lib.inputDialog('Search Stashes', {
+        {type = 'input', label = 'Search', description = 'Search by label, type, or ID (leave empty for all)', required = false},
+        {type = 'select', label = 'Filter by Type', description = 'Filter stashes by type', options = {
+            {value = 'all', label = 'All Types'},
+            {value = Config.StashTypes.PERSONAL, label = 'Personal'},
+            {value = Config.StashTypes.JOB, label = 'Job'},
+            {value = Config.StashTypes.GANG, label = 'Gang'},
+            {value = Config.StashTypes.PASSCODE, label = 'Passcode'},
+            {value = Config.StashTypes.ITEM, label = 'Item Required'}
+        }, default = 'all'}
+    })
+    
+    if not searchInput then return end
+    
+    local searchTerm = searchInput[1] and searchInput[1]:lower() or ''
+    local filterType = searchInput[2]
     local options = {}
     
     for stashId, stash in pairs(stashes) do
-        local typeLabel = stash.stash_type
-        if stash.stash_type == Config.StashTypes.JOB then
-            typeLabel = 'Job: ' .. (stash.job or 'N/A')
-        elseif stash.stash_type == Config.StashTypes.GANG then
-            typeLabel = 'Gang: ' .. (stash.gang or 'N/A')
-        elseif stash.stash_type == Config.StashTypes.PERSONAL then
-            typeLabel = 'Personal: ' .. (stash.cid or 'N/A')
-        elseif stash.stash_type == Config.StashTypes.PASSCODE then
-            typeLabel = 'Passcode Protected'
-        end
+        local matchesSearch = searchTerm == '' or 
+            stash.label:lower():find(searchTerm, 1, true) or 
+            stashId:lower():find(searchTerm, 1, true) or
+            stash.stash_type:lower():find(searchTerm, 1, true)
         
-        table.insert(options, {
-            title = stash.label,
-            description = typeLabel .. ' | Slots: ' .. stash.slots .. ' | Weight: ' .. stash.weight .. 'g',
-            icon = 'box',
-            onSelect = function()
-                OpenStashManagementOptions(stashId)
+        local matchesFilter = filterType == 'all' or stash.stash_type == filterType
+        
+        if matchesSearch and matchesFilter then
+            local typeLabel = stash.stash_type
+            if stash.stash_type == Config.StashTypes.JOB then
+                typeLabel = 'Job: ' .. (stash.job or 'N/A')
+            elseif stash.stash_type == Config.StashTypes.GANG then
+                typeLabel = 'Gang: ' .. (stash.gang or 'N/A')
+            elseif stash.stash_type == Config.StashTypes.PERSONAL then
+                typeLabel = 'Personal: ' .. (stash.cid or 'N/A')
+            elseif stash.stash_type == Config.StashTypes.PASSCODE then
+                typeLabel = 'Passcode Protected'
+            elseif stash.stash_type == Config.StashTypes.ITEM then
+                typeLabel = 'Item: ' .. (stash.required_item or 'N/A')
             end
-        })
+            
+            table.insert(options, {
+                title = stash.label,
+                description = typeLabel .. ' | Slots: ' .. stash.slots .. ' | Weight: ' .. stash.weight .. 'g',
+                icon = 'box',
+                onSelect = function()
+                    OpenStashManagementOptions(stashId)
+                end
+            })
+        end
     end
     
     if #options == 0 then
-        lib.notify({type = 'error', description = 'No stashes found'})
+        lib.notify({type = 'error', description = 'No stashes found matching your criteria'})
         return
     end
     
     lib.registerContext({
         id = 'manage_stashes',
-        title = 'Manage Stashes',
+        title = 'Manage Stashes (' .. #options .. ' found)',
         options = options
     })
     
@@ -369,7 +473,8 @@ function EditStash(stashId)
             {value = Config.StashTypes.PERSONAL, label = 'Personal (CID Based)'},
             {value = Config.StashTypes.JOB, label = 'Job Based'},
             {value = Config.StashTypes.GANG, label = 'Gang Based'},
-            {value = Config.StashTypes.PASSCODE, label = 'Passcode Protected'}
+            {value = Config.StashTypes.PASSCODE, label = 'Passcode Protected'},
+            {value = Config.StashTypes.ITEM, label = 'Item Required'}
         }}
     })
     
@@ -405,6 +510,13 @@ function EditStash(stashId)
         })
         if not passcodeInput then return end
         additionalData.passcode = passcodeInput[1]
+        
+    elseif stashType == Config.StashTypes.ITEM then
+        local itemInput = lib.inputDialog('Item Configuration', {
+            {type = 'input', label = 'Required Item', description = 'Item name needed to open', default = stash.required_item, required = true}
+        })
+        if not itemInput then return end
+        additionalData.required_item = itemInput[1]
     end
     
     local data = {
@@ -417,6 +529,7 @@ function EditStash(stashId)
         gang = additionalData.gang,
         cid = additionalData.cid,
         passcode = additionalData.passcode,
+        required_item = additionalData.required_item,
         show_blip = stash.show_blip,
         blip_sprite = stash.blip_sprite,
         blip_color = stash.blip_color,

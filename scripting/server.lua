@@ -38,6 +38,72 @@ function GetPlayerName(source)
     return GetPlayerName(source) or 'Unknown'
 end
 
+function HasItem(source, item)
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        if not Player then return false end
+        local hasItem = Player.Functions.GetItemByName(item)
+        return hasItem ~= nil
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if not xPlayer then return false end
+        local item = xPlayer.getInventoryItem(item)
+        return item and item.count > 0
+    end
+    return false
+end
+
+function RemoveItem(source, item, amount)
+    amount = amount or 1
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        if Player then
+            Player.Functions.RemoveItem(item, amount)
+        end
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if xPlayer then
+            xPlayer.removeInventoryItem(item, amount)
+        end
+    end
+end
+
+function CanRaidStash(source, stash)
+    if not Config.RaidSystem.enabled then return false end
+    
+    local canRaid = false
+    for _, raidableType in ipairs(Config.RaidSystem.raidableTypes) do
+        if stash.stash_type == raidableType then
+            canRaid = true
+            break
+        end
+    end
+    
+    if not canRaid then return false end
+    
+    if Config.Framework == 'qb-core' then
+        local Player = QBCore.Functions.GetPlayer(source)
+        if not Player then return false end
+        
+        for _, job in ipairs(Config.RaidSystem.allowedJobs) do
+            if Player.PlayerData.job.name == job then
+                return HasItem(source, Config.RaidSystem.raidItem)
+            end
+        end
+    elseif Config.Framework == 'esx' then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if not xPlayer then return false end
+        
+        for _, job in ipairs(Config.RaidSystem.allowedJobs) do
+            if xPlayer.job.name == job then
+                return HasItem(source, Config.RaidSystem.raidItem)
+            end
+        end
+    end
+    
+    return false
+end
+
 CreateThread(function()
     while not MySQL do
         Wait(100)
@@ -56,6 +122,7 @@ CreateThread(function()
             gang VARCHAR(50) DEFAULT NULL,
             cid VARCHAR(50) DEFAULT NULL,
             passcode VARCHAR(50) DEFAULT NULL,
+            required_item VARCHAR(100) DEFAULT NULL,
             show_blip BOOLEAN DEFAULT FALSE,
             blip_sprite INT DEFAULT 478,
             blip_color INT DEFAULT 2,
@@ -86,6 +153,7 @@ function LoadStashes()
                     gang = stash.gang,
                     cid = stash.cid,
                     passcode = stash.passcode,
+                    required_item = stash.required_item,
                     show_blip = stash.show_blip or false,
                     blip_sprite = stash.blip_sprite or 478,
                     blip_color = stash.blip_color or 2,
@@ -250,8 +318,8 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
         stashId = 'stash_' .. math.random(10000, 99999)
     end
     
-    MySQL.insert('INSERT INTO paradise_storages (stash_id, label, slots, weight, coords, stash_type, job, gang, cid, passcode, show_blip, blip_sprite, blip_color, blip_scale, spawn_prop, prop_model, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        {stashId, data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, creatorId},
+    MySQL.insert('INSERT INTO paradise_storages (stash_id, label, slots, weight, coords, stash_type, job, gang, cid, passcode, required_item, show_blip, blip_sprite, blip_color, blip_scale, spawn_prop, prop_model, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        {stashId, data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.required_item, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, creatorId},
         function(id)
             if id then
                 stashes[stashId] = {
@@ -266,6 +334,7 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
                     gang = data.gang,
                     cid = data.cid,
                     passcode = data.passcode,
+                    required_item = data.required_item,
                     show_blip = data.show_blip or false,
                     blip_sprite = data.blip_sprite or 478,
                     blip_color = data.blip_color or 2,
@@ -313,8 +382,8 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
         propModel = stashes[stashId].prop_model
     end
     
-    MySQL.update('UPDATE paradise_storages SET label = ?, slots = ?, weight = ?, coords = ?, stash_type = ?, job = ?, gang = ?, cid = ?, passcode = ?, show_blip = ?, blip_sprite = ?, blip_color = ?, blip_scale = ?, spawn_prop = ?, prop_model = ? WHERE stash_id = ?',
-        {data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, spawnProp, propModel, stashId},
+    MySQL.update('UPDATE paradise_storages SET label = ?, slots = ?, weight = ?, coords = ?, stash_type = ?, job = ?, gang = ?, cid = ?, passcode = ?, required_item = ?, show_blip = ?, blip_sprite = ?, blip_color = ?, blip_scale = ?, spawn_prop = ?, prop_model = ? WHERE stash_id = ?',
+        {data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.required_item, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, spawnProp, propModel, stashId},
         function(affectedRows)
             if affectedRows > 0 then
                 stashes[stashId].label = data.label
@@ -326,6 +395,7 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
                 stashes[stashId].gang = data.gang
                 stashes[stashId].cid = data.cid
                 stashes[stashId].passcode = data.passcode
+                stashes[stashId].required_item = data.required_item
                 stashes[stashId].show_blip = data.show_blip or false
                 stashes[stashId].blip_sprite = data.blip_sprite or 478
                 stashes[stashId].blip_color = data.blip_color or 2
@@ -399,6 +469,8 @@ lib.callback.register('paradise_storages:server:checkAccess', function(source, s
             return Player.PlayerData.citizenid == stash.cid
         elseif stash.stash_type == Config.StashTypes.PASSCODE then
             return true
+        elseif stash.stash_type == Config.StashTypes.ITEM then
+            return true
         end
     elseif Config.Framework == 'esx' then
         local xPlayer = ESX.GetPlayerFromId(source)
@@ -407,11 +479,12 @@ lib.callback.register('paradise_storages:server:checkAccess', function(source, s
         if stash.stash_type == Config.StashTypes.JOB then
             return xPlayer.job.name == stash.job
         elseif stash.stash_type == Config.StashTypes.GANG then
-            -- ESX doesn't have gangs by default, add yours over here
             return false
         elseif stash.stash_type == Config.StashTypes.PERSONAL then
             return xPlayer.identifier == stash.cid
         elseif stash.stash_type == Config.StashTypes.PASSCODE then
+            return true
+        elseif stash.stash_type == Config.StashTypes.ITEM then
             return true
         end
     end
@@ -426,7 +499,14 @@ lib.callback.register('paradise_storages:server:verifyPasscode', function(source
     return stash.passcode == passcode
 end)
 
-RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcodeVerified)
+lib.callback.register('paradise_storages:server:canRaid', function(source, stashId)
+    local stash = stashes[stashId]
+    if not stash then return false end
+    
+    return CanRaidStash(source, stash)
+end)
+
+RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcodeVerified, isRaid)
     local src = source
     local stash = stashes[stashId]
     
@@ -436,32 +516,56 @@ RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcod
     end
     
     local hasAccess = false
+    local accessMethod = 'normal'
     
-    if Config.Framework == 'qb-core' then
-        local Player = QBCore.Functions.GetPlayer(src)
-        if not Player then return end
+    if isRaid and CanRaidStash(src, stash) then
+        hasAccess = true
+        accessMethod = 'raid'
         
-        if stash.stash_type == Config.StashTypes.JOB then
-            hasAccess = Player.PlayerData.job.name == stash.job
-        elseif stash.stash_type == Config.StashTypes.GANG then
-            hasAccess = Player.PlayerData.gang.name == stash.gang
-        elseif stash.stash_type == Config.StashTypes.PERSONAL then
-            hasAccess = Player.PlayerData.citizenid == stash.cid
-        elseif stash.stash_type == Config.StashTypes.PASSCODE then
-            hasAccess = passcodeVerified == true
+        if Config.RaidSystem.removeItemOnUse then
+            RemoveItem(src, Config.RaidSystem.raidItem, 1)
         end
-    elseif Config.Framework == 'esx' then
-        local xPlayer = ESX.GetPlayerFromId(src)
-        if not xPlayer then return end
-        
-        if stash.stash_type == Config.StashTypes.JOB then
-            hasAccess = xPlayer.job.name == stash.job
-        elseif stash.stash_type == Config.StashTypes.GANG then
-            hasAccess = false -- ESX doesn't have gangs by default
-        elseif stash.stash_type == Config.StashTypes.PERSONAL then
-            hasAccess = xPlayer.identifier == stash.cid
-        elseif stash.stash_type == Config.StashTypes.PASSCODE then
-            hasAccess = passcodeVerified == true
+    else
+        if Config.Framework == 'qb-core' then
+            local Player = QBCore.Functions.GetPlayer(src)
+            if not Player then return end
+            
+            if stash.stash_type == Config.StashTypes.JOB then
+                hasAccess = Player.PlayerData.job.name == stash.job
+            elseif stash.stash_type == Config.StashTypes.GANG then
+                hasAccess = Player.PlayerData.gang.name == stash.gang
+            elseif stash.stash_type == Config.StashTypes.PERSONAL then
+                hasAccess = Player.PlayerData.citizenid == stash.cid
+            elseif stash.stash_type == Config.StashTypes.PASSCODE then
+                hasAccess = passcodeVerified == true
+            elseif stash.stash_type == Config.StashTypes.ITEM then
+                if stash.required_item and HasItem(src, stash.required_item) then
+                    hasAccess = true
+                else
+                    TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need ' .. (stash.required_item or 'an item') .. ' to open this stash'})
+                    return
+                end
+            end
+        elseif Config.Framework == 'esx' then
+            local xPlayer = ESX.GetPlayerFromId(src)
+            if not xPlayer then return end
+            
+            if stash.stash_type == Config.StashTypes.JOB then
+                hasAccess = xPlayer.job.name == stash.job
+            elseif stash.stash_type == Config.StashTypes.GANG then
+                hasAccess = false
+            elseif stash.stash_type == Config.StashTypes.PERSONAL then
+                hasAccess = xPlayer.identifier == stash.cid
+            elseif stash.stash_type == Config.StashTypes.PASSCODE then
+                hasAccess = passcodeVerified == true
+            elseif stash.stash_type == Config.StashTypes.ITEM then
+                if stash.required_item and HasItem(src, stash.required_item) then
+                    hasAccess = true
+                else
+                    TriggerClientEvent('ox_lib:notify', src, {type = 'error', description = 'You need ' .. (stash.required_item or 'an item') .. ' to open this stash'})
+                    return
+                end
+            end
         end
     end
     
@@ -476,9 +580,9 @@ RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcod
     if Paradise.Discord.logs.accessStash then
         local playerName = GetPlayerName(src)
         local logDescription = string.format(
-            '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s',
-            playerName, src, stashId, stash.label, stash.stash_type
+            '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s\n**Access Method:** %s',
+            playerName, src, stashId, stash.label, stash.stash_type, accessMethod == 'raid' and 'RAID' or 'Normal'
         )
-        SendDiscordLog('Stash Accessed', logDescription, 3447003) -- Blue
+        SendDiscordLog('Stash Accessed', logDescription, accessMethod == 'raid' and 15158332 or 3447003)
     end
 end)
