@@ -24,3 +24,15 @@ CREATE TABLE IF NOT EXISTS `paradise_storages` (
 -- Migration query for existing installations
 -- Run this if you already have the paradise_storages table
 ALTER TABLE `paradise_storages` ADD COLUMN `required_item` VARCHAR(100) DEFAULT NULL AFTER `passcode`;
+
+
+-- Migration to add stash_mode column to existing paradise_storages table
+-- Run this if you already have the paradise_storages table created
+
+ALTER TABLE paradise_storages 
+ADD COLUMN IF NOT EXISTS stash_mode VARCHAR(20) DEFAULT 'shared' AFTER required_item;
+
+-- Update existing job and gang stashes to use shared mode by default
+UPDATE paradise_storages 
+SET stash_mode = 'shared' 
+WHERE stash_mode IS NULL AND (stash_type = 'job' OR stash_type = 'gang');

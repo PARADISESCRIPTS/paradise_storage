@@ -59,6 +59,12 @@ Config.StashTypes = {
     ITEM = 'item' -- Requires specific item to open
 }
 
+-- Job/Gang stash modes
+Config.StashModes = {
+    SHARED = 'shared', -- All job/gang members share the same stash
+    PERSONAL = 'personal' -- Each job/gang member has their own stash
+}
+
 -- Raid System
 Config.RaidSystem = {
     enabled = true,

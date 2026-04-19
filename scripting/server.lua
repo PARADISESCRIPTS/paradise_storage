@@ -123,6 +123,7 @@ CreateThread(function()
             cid VARCHAR(50) DEFAULT NULL,
             passcode VARCHAR(50) DEFAULT NULL,
             required_item VARCHAR(100) DEFAULT NULL,
+            stash_mode VARCHAR(20) DEFAULT 'shared',
             show_blip BOOLEAN DEFAULT FALSE,
             blip_sprite INT DEFAULT 478,
             blip_color INT DEFAULT 2,
@@ -154,6 +155,7 @@ function LoadStashes()
                     cid = stash.cid,
                     passcode = stash.passcode,
                     required_item = stash.required_item,
+                    stash_mode = stash.stash_mode or 'shared',
                     show_blip = stash.show_blip or false,
                     blip_sprite = stash.blip_sprite or 478,
                     blip_color = stash.blip_color or 2,
@@ -318,8 +320,8 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
         stashId = 'stash_' .. math.random(10000, 99999)
     end
     
-    MySQL.insert('INSERT INTO paradise_storages (stash_id, label, slots, weight, coords, stash_type, job, gang, cid, passcode, required_item, show_blip, blip_sprite, blip_color, blip_scale, spawn_prop, prop_model, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        {stashId, data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.required_item, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, creatorId},
+    MySQL.insert('INSERT INTO paradise_storages (stash_id, label, slots, weight, coords, stash_type, job, gang, cid, passcode, required_item, stash_mode, show_blip, blip_sprite, blip_color, blip_scale, spawn_prop, prop_model, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        {stashId, data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.required_item, data.stash_mode or 'shared', data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, data.spawn_prop or false, data.prop_model, creatorId},
         function(id)
             if id then
                 stashes[stashId] = {
@@ -335,6 +337,7 @@ RegisterNetEvent('paradise_storages:server:createStash', function(data)
                     cid = data.cid,
                     passcode = data.passcode,
                     required_item = data.required_item,
+                    stash_mode = data.stash_mode or 'shared',
                     show_blip = data.show_blip or false,
                     blip_sprite = data.blip_sprite or 478,
                     blip_color = data.blip_color or 2,
@@ -382,8 +385,8 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
         propModel = stashes[stashId].prop_model
     end
     
-    MySQL.update('UPDATE paradise_storages SET label = ?, slots = ?, weight = ?, coords = ?, stash_type = ?, job = ?, gang = ?, cid = ?, passcode = ?, required_item = ?, show_blip = ?, blip_sprite = ?, blip_color = ?, blip_scale = ?, spawn_prop = ?, prop_model = ? WHERE stash_id = ?',
-        {data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.required_item, data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, spawnProp, propModel, stashId},
+    MySQL.update('UPDATE paradise_storages SET label = ?, slots = ?, weight = ?, coords = ?, stash_type = ?, job = ?, gang = ?, cid = ?, passcode = ?, required_item = ?, stash_mode = ?, show_blip = ?, blip_sprite = ?, blip_color = ?, blip_scale = ?, spawn_prop = ?, prop_model = ? WHERE stash_id = ?',
+        {data.label, data.slots, data.weight, json.encode(data.coords), data.stash_type, data.job, data.gang, data.cid, data.passcode, data.required_item, data.stash_mode or 'shared', data.show_blip or false, data.blip_sprite or 478, data.blip_color or 2, data.blip_scale or 0.8, spawnProp, propModel, stashId},
         function(affectedRows)
             if affectedRows > 0 then
                 stashes[stashId].label = data.label
@@ -396,6 +399,7 @@ RegisterNetEvent('paradise_storages:server:updateStash', function(stashId, data)
                 stashes[stashId].cid = data.cid
                 stashes[stashId].passcode = data.passcode
                 stashes[stashId].required_item = data.required_item
+                stashes[stashId].stash_mode = data.stash_mode or 'shared'
                 stashes[stashId].show_blip = data.show_blip or false
                 stashes[stashId].blip_sprite = data.blip_sprite or 478
                 stashes[stashId].blip_color = data.blip_color or 2
@@ -492,6 +496,28 @@ lib.callback.register('paradise_storages:server:checkAccess', function(source, s
     return false
 end)
 
+function GetPersonalStashId(stashId, stash, source)
+    -- If stash mode is personal for job/gang, append player identifier
+    if stash.stash_mode == Config.StashModes.PERSONAL then
+        if stash.stash_type == Config.StashTypes.JOB or stash.stash_type == Config.StashTypes.GANG then
+            local playerId = nil
+            if Config.Framework == 'qb-core' then
+                local Player = QBCore.Functions.GetPlayer(source)
+                playerId = Player and Player.PlayerData.citizenid
+            elseif Config.Framework == 'esx' then
+                local xPlayer = ESX.GetPlayerFromId(source)
+                playerId = xPlayer and xPlayer.identifier
+            end
+            
+            if playerId then
+                return stashId .. '_' .. playerId
+            end
+        end
+    end
+    
+    return stashId
+end
+
 lib.callback.register('paradise_storages:server:verifyPasscode', function(source, stashId, passcode)
     local stash = stashes[stashId]
     if not stash then return false end
@@ -574,14 +600,18 @@ RegisterNetEvent('paradise_storages:server:openStash', function(stashId, passcod
         return
     end
     
-    exports.ox_inventory:RegisterStash(stashId, stash.label, stash.slots, stash.weight, false)
-    TriggerClientEvent('ox_inventory:openInventory', src, 'stash', stashId)
+    -- Get the actual stash ID (personal or shared)
+    local actualStashId = GetPersonalStashId(stashId, stash, src)
+    
+    exports.ox_inventory:RegisterStash(actualStashId, stash.label, stash.slots, stash.weight, false)
+    TriggerClientEvent('ox_inventory:openInventory', src, 'stash', actualStashId)
     
     if Paradise.Discord.logs.accessStash then
         local playerName = GetPlayerName(src)
+        local modeInfo = stash.stash_mode == Config.StashModes.PERSONAL and ' (Personal)' or ' (Shared)'
         local logDescription = string.format(
-            '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s\n**Access Method:** %s',
-            playerName, src, stashId, stash.label, stash.stash_type, accessMethod == 'raid' and 'RAID' or 'Normal'
+            '**Player:** %s (ID: %s)\n**Stash ID:** %s\n**Label:** %s\n**Type:** %s%s\n**Access Method:** %s',
+            playerName, src, actualStashId, stash.label, stash.stash_type, modeInfo, accessMethod == 'raid' and 'RAID' or 'Normal'
         )
         SendDiscordLog('Stash Accessed', logDescription, accessMethod == 'raid' and 15158332 or 3447003)
     end

@@ -261,17 +261,27 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
     
     if stashType == Config.StashTypes.JOB then
         local jobInput = lib.inputDialog('Job Configuration', {
-            {type = 'input', label = 'Job Name', description = 'Enter job name (e.g., police)', required = true}
+            {type = 'input', label = 'Job Name', description = 'Enter job name (e.g., police)', required = true},
+            {type = 'select', label = 'Stash Mode', description = 'Choose stash access mode', required = true, options = {
+                {value = Config.StashModes.SHARED, label = 'Shared - All job members share this stash'},
+                {value = Config.StashModes.PERSONAL, label = 'Personal - Each job member has their own stash'}
+            }}
         })
         if not jobInput then return end
         additionalData.job = jobInput[1]
+        additionalData.stash_mode = jobInput[2]
         
     elseif stashType == Config.StashTypes.GANG then
         local gangInput = lib.inputDialog('Gang Configuration', {
-            {type = 'input', label = 'Gang Name', description = 'Enter gang name (e.g., ballas)', required = true}
+            {type = 'input', label = 'Gang Name', description = 'Enter gang name (e.g., ballas)', required = true},
+            {type = 'select', label = 'Stash Mode', description = 'Choose stash access mode', required = true, options = {
+                {value = Config.StashModes.SHARED, label = 'Shared - All gang members share this stash'},
+                {value = Config.StashModes.PERSONAL, label = 'Personal - Each gang member has their own stash'}
+            }}
         })
         if not gangInput then return end
         additionalData.gang = gangInput[1]
+        additionalData.stash_mode = gangInput[2]
         
     elseif stashType == Config.StashTypes.PERSONAL then
         local cidInput = lib.inputDialog('Personal Configuration', {
@@ -327,6 +337,7 @@ RegisterNetEvent('paradise_storages:client:openCreateMenu', function()
         cid = additionalData.cid,
         passcode = additionalData.passcode,
         required_item = additionalData.required_item,
+        stash_mode = additionalData.stash_mode or Config.StashModes.SHARED,
         show_blip = showBlip,
         blip_sprite = blipData.blip_sprite or 478,
         blip_color = blipData.blip_color or 2,
@@ -369,9 +380,11 @@ RegisterNetEvent('paradise_storages:client:openManageMenu', function()
         if matchesSearch and matchesFilter then
             local typeLabel = stash.stash_type
             if stash.stash_type == Config.StashTypes.JOB then
-                typeLabel = 'Job: ' .. (stash.job or 'N/A')
+                local mode = stash.stash_mode == Config.StashModes.PERSONAL and ' (Personal)' or ' (Shared)'
+                typeLabel = 'Job: ' .. (stash.job or 'N/A') .. mode
             elseif stash.stash_type == Config.StashTypes.GANG then
-                typeLabel = 'Gang: ' .. (stash.gang or 'N/A')
+                local mode = stash.stash_mode == Config.StashModes.PERSONAL and ' (Personal)' or ' (Shared)'
+                typeLabel = 'Gang: ' .. (stash.gang or 'N/A') .. mode
             elseif stash.stash_type == Config.StashTypes.PERSONAL then
                 typeLabel = 'Personal: ' .. (stash.cid or 'N/A')
             elseif stash.stash_type == Config.StashTypes.PASSCODE then
@@ -485,17 +498,27 @@ function EditStash(stashId)
     
     if stashType == Config.StashTypes.JOB then
         local jobInput = lib.inputDialog('Job Configuration', {
-            {type = 'input', label = 'Job Name', default = stash.job, required = true}
+            {type = 'input', label = 'Job Name', default = stash.job, required = true},
+            {type = 'select', label = 'Stash Mode', description = 'Choose stash access mode', default = stash.stash_mode or Config.StashModes.SHARED, required = true, options = {
+                {value = Config.StashModes.SHARED, label = 'Shared - All job members share this stash'},
+                {value = Config.StashModes.PERSONAL, label = 'Personal - Each job member has their own stash'}
+            }}
         })
         if not jobInput then return end
         additionalData.job = jobInput[1]
+        additionalData.stash_mode = jobInput[2]
         
     elseif stashType == Config.StashTypes.GANG then
         local gangInput = lib.inputDialog('Gang Configuration', {
-            {type = 'input', label = 'Gang Name', default = stash.gang, required = true}
+            {type = 'input', label = 'Gang Name', default = stash.gang, required = true},
+            {type = 'select', label = 'Stash Mode', description = 'Choose stash access mode', default = stash.stash_mode or Config.StashModes.SHARED, required = true, options = {
+                {value = Config.StashModes.SHARED, label = 'Shared - All gang members share this stash'},
+                {value = Config.StashModes.PERSONAL, label = 'Personal - Each gang member has their own stash'}
+            }}
         })
         if not gangInput then return end
         additionalData.gang = gangInput[1]
+        additionalData.stash_mode = gangInput[2]
         
     elseif stashType == Config.StashTypes.PERSONAL then
         local cidInput = lib.inputDialog('Personal Configuration', {
@@ -530,6 +553,7 @@ function EditStash(stashId)
         cid = additionalData.cid,
         passcode = additionalData.passcode,
         required_item = additionalData.required_item,
+        stash_mode = additionalData.stash_mode or stash.stash_mode or Config.StashModes.SHARED,
         show_blip = stash.show_blip,
         blip_sprite = stash.blip_sprite,
         blip_color = stash.blip_color,
@@ -571,6 +595,7 @@ function UpdateStashLocation(stashId)
                         gang = stash.gang,
                         cid = stash.cid,
                         passcode = stash.passcode,
+                        stash_mode = stash.stash_mode,
                         show_blip = stash.show_blip,
                         blip_sprite = stash.blip_sprite,
                         blip_color = stash.blip_color,
