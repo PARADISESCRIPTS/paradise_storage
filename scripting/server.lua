@@ -109,7 +109,7 @@ CreateThread(function()
         Wait(100)
     end
     
-    MySQL.query([[
+    MySQL.query.await([[
         CREATE TABLE IF NOT EXISTS paradise_storages (
             id INT AUTO_INCREMENT PRIMARY KEY,
             stash_id VARCHAR(100) UNIQUE NOT NULL,
@@ -134,9 +134,34 @@ CreateThread(function()
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ]])
-    
+
+    EnsureColumns()
+
     LoadStashes()
 end)
+
+-- Auto-migrate columns added after initial release (existing tables won't have them)
+function EnsureColumns()
+    local migrations = {
+        { name = 'required_item', definition = "VARCHAR(100) DEFAULT NULL AFTER passcode" },
+        { name = 'stash_mode', definition = "VARCHAR(20) DEFAULT 'shared' AFTER required_item" }
+    }
+
+    local result = MySQL.query.await("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'paradise_storages'")
+    if not result then return end
+
+    local existing = {}
+    for _, col in ipairs(result) do
+        existing[col.COLUMN_NAME] = true
+    end
+
+    for _, migration in ipairs(migrations) do
+        if not existing[migration.name] then
+            MySQL.query.await(('ALTER TABLE paradise_storages ADD COLUMN %s %s'):format(migration.name, migration.definition))
+            print('^3[Paradise Storages]^7 Migrated database: added column ' .. migration.name)
+        end
+    end
+end
 
 function LoadStashes()
     MySQL.query('SELECT * FROM paradise_storages', {}, function(result)
